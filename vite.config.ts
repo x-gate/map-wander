@@ -2,8 +2,10 @@ import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: "./",
   server: {
-    port: 8080,
-    open: true,
+    host: "127.0.0.1",
+    port: 8081,
+    strictPort: true,
   },
 });

@@ -4,10 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "npm run dev",
-    "build": "npm run lint && tsc && vite build",
+    "start": "bun run dev",
+    "dev": "bun run build:wasm && vite",
+    "build:wasm": "bun scripts/build-wasm.ts",
+    "build": "bun run build:wasm && bun run lint && bun run typecheck && vite build",
     "lint": "eslint .",
-    "dev": "vite"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/unit",
+    "audit:local": "bun scripts/audit-local.ts ../CGoriginmood",
+    "format": "prettier --write src scripts tests index.html public/style.css vite.config.ts README.md package.json"
   },
   "dependencies": {
     "pixi.js": "^8.8.1"
