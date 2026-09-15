@@ -60,6 +60,7 @@ export async function loadGame(
       files["Assets/bin/AnimeInfo_4.bin"],
       files["Assets/bin/Anime_4.bin"],
       100052,
+      2425,
     ),
   ]);
 

@@ -178,6 +178,7 @@ export async function loadAnime(
   infoFile: File,
   dataFile: File,
   id: number,
+  row?: number,
 ) {
   if (!infoFile.size || infoFile.size % ANIME_INFO_SIZE)
     throw new Error("AnimeInfo 長度必須為 12 bytes 的倍數。");
@@ -191,8 +192,13 @@ export async function loadAnime(
       ),
     );
   const matches = records.filter((record) => record.id === id);
-  const selected = matches[0];
-  if (!selected) throw new Error(`找不到動畫 ID ${id}。`);
+  const selected = row === undefined ? matches[0] : records[row];
+  if (!selected || selected.id !== id)
+    throw new Error(
+      row === undefined
+        ? `找不到動畫 ID ${id}。`
+        : `動畫索引列 ${row} 不是 AnimeID ${id}。`,
+    );
   const end = records[selected.row + 1]?.addr ?? dataFile.size;
   if (selected.addr < 0 || end <= selected.addr || end > dataFile.size)
     throw new Error(`動畫 ID ${id} 的索引範圍無效。`);

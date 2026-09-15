@@ -103,7 +103,7 @@ async function start(files: GameFiles) {
     resourceNote.textContent =
       `動畫 100052 使用索引列 ${resources.animeRow}` +
       (resources.animeDuplicateCount > 1
-        ? `（共 ${resources.animeDuplicateCount} 筆同號資料，固定採第一筆）`
+        ? `（共 ${resources.animeDuplicateCount} 筆同號資料，明確指定此列）`
         : "") +
       (resources.missingMapIds.length
         ? `；Graphic_66 無對應地圖圖像 ID：${resources.missingMapIds.join("、")}，該物件層保持透明。`
