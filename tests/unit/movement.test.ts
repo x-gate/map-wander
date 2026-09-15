@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   buildWalkability,
   directionFor,
+  directionToward,
   DIRECTION_DELTAS,
   findPath,
   nearestWalkable,
@@ -40,6 +41,11 @@ test("方向 0 從西北開始並順時針對應八方位", () => {
       direction,
     ),
   );
+});
+
+test("轉向使用目標格位相對方向，同一格則維持原朝向", () => {
+  expect(directionToward({ x: 5, y: 5 }, { x: 2, y: 8 })).toBe(5);
+  expect(directionToward({ x: 5, y: 5 }, { x: 5, y: 5 })).toBeNull();
 });
 
 test("A* 會繞過障礙抵達指定格位", () => {

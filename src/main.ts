@@ -37,9 +37,9 @@ app.innerHTML = `
       <aside class="hud" aria-live="polite">
         <div><span>角色</span><strong id="player-coordinate">—</strong></div>
         <div><span>游標格位</span><strong id="hover-coordinate">—</strong></div>
-        <p id="movement-status">在格位上按右鍵移動</p>
+        <p id="movement-status">左鍵移動，右鍵改變朝向</p>
       </aside>
-      <div class="controls-hint"><span>右鍵</span> 移動 <span>左鍵拖曳</span> 平移 <span>滾輪</span> 縮放</div>
+      <div class="controls-hint"><span>左鍵</span> 移動 <span>右鍵</span> 轉向 <span>左鍵拖曳</span> 平移 <span>滾輪</span> 縮放</div>
       <div id="resource-note" class="resource-note"></div>
     </section>
   </main>

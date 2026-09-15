@@ -12,6 +12,7 @@ import { clampZoom, screenTile, tilePosition } from "./geometry";
 import {
   buildWalkability,
   directionFor,
+  directionToward,
   findPath,
   nearestWalkable,
   type Cell,
@@ -62,10 +63,11 @@ export class WanderGame {
   private route: Cell[] = [];
   private segment?: Segment;
   private direction = 4;
+  private pendingDirection?: number;
   private animationElapsed = 0;
   private dragging?: { id: number; x: number; y: number; moved: boolean };
   private observer?: ResizeObserver;
-  private message = "在格位上按右鍵移動";
+  private message = "左鍵移動，右鍵改變朝向";
   onStatus: (status: GameStatus) => void = () => {};
 
   constructor(
@@ -119,7 +121,7 @@ export class WanderGame {
     this.host.replaceChildren(this.app.canvas);
     this.app.canvas.setAttribute(
       "aria-label",
-      "1011 地圖畫布；右鍵移動，左鍵拖曳，滾輪縮放",
+      "1011 地圖畫布；左鍵移動或拖曳平移，右鍵改變朝向，滾輪縮放",
     );
     this.app.canvas.tabIndex = 0;
     this.app.canvas.style.cursor = "none";
@@ -230,7 +232,13 @@ export class WanderGame {
       canvas.focus();
     });
     canvas.addEventListener("pointerup", (event) => {
-      if (this.dragging?.id === event.pointerId) this.dragging = undefined;
+      const drag = this.dragging;
+      if (!drag || drag.id !== event.pointerId) return;
+      this.dragging = undefined;
+      if (!drag.moved) {
+        const cell = this.tileFromPointer(event.clientX, event.clientY);
+        if (this.validCell(cell)) this.moveTo(cell);
+      }
     });
     canvas.addEventListener("lostpointercapture", () => {
       this.dragging = undefined;
@@ -238,7 +246,7 @@ export class WanderGame {
     canvas.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       const cell = this.tileFromPointer(event.clientX, event.clientY);
-      if (this.validCell(cell)) this.moveTo(cell);
+      if (this.validCell(cell)) this.faceToward(cell);
     });
     canvas.addEventListener(
       "wheel",
@@ -298,9 +306,32 @@ export class WanderGame {
       return;
     }
     this.route = route.slice(1);
+    this.pendingDirection = undefined;
     this.target = goal;
     this.message =
       route.length === 1 ? "角色已在指定格位" : `前往 (${goal.x}, ${goal.y})`;
+    this.emitStatus();
+  }
+
+  private faceToward(target: Cell) {
+    const origin = this.segment?.to ?? this.player;
+    const direction = directionToward(origin, target);
+    if (direction === null) {
+      this.message = "點擊格位與角色位置相同，朝向維持不變";
+      this.emitStatus();
+      return;
+    }
+    this.route = [];
+    this.target = undefined;
+    this.animationElapsed = 0;
+    if (this.segment) {
+      this.pendingDirection = direction;
+      this.message = `完成目前一步後轉向方向 ${direction}`;
+    } else {
+      this.direction = direction;
+      this.message = `已轉向方向 ${direction}`;
+      this.updateCharacter();
+    }
     this.emitStatus();
   }
 
@@ -317,9 +348,13 @@ export class WanderGame {
         this.player = this.segment.to;
         this.segment = undefined;
         if (!this.route.length) {
+          if (this.pendingDirection !== undefined) {
+            this.direction = this.pendingDirection;
+            this.pendingDirection = undefined;
+          }
           this.target = undefined;
           this.animationElapsed = 0;
-          this.message = `已抵達 (${this.player.x}, ${this.player.y})`;
+          this.message = `已停在 (${this.player.x}, ${this.player.y})，方向 ${this.direction}`;
           this.emitStatus();
         }
       }

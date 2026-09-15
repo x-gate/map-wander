@@ -38,6 +38,11 @@ export function directionFor(from: Cell, to: Cell) {
   return direction;
 }
 
+export function directionToward(from: Cell, target: Cell) {
+  if (from.x === target.x && from.y === target.y) return null;
+  return directionFor(from, target);
+}
+
 export function buildWalkability(
   map: CollisionMap,
   records: Map<number, CollisionRecord>,
