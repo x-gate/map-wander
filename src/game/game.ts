@@ -13,6 +13,7 @@ import {
   loopFrameIndex,
   type AnimationClock,
 } from "./animation";
+import { cursorCssValue } from "./cursor";
 import { clampZoom, screenTile, tilePosition } from "./geometry";
 import {
   buildWalkability,
@@ -58,7 +59,6 @@ export class WanderGame {
   private scene = new Container();
   private marker: Sprite;
   private character: Sprite;
-  private cursor: Sprite;
   private textures: Texture[] = [];
   private textureByGraphic = new Map<DecodedGraphic, Texture>();
   private walkability: Uint8Array;
@@ -80,15 +80,12 @@ export class WanderGame {
     private resources: LoadedGame,
   ) {
     this.walkability = buildWalkability(resources.map, resources.mapRecords);
-    const cursorTexture = this.texture(resources.cursor);
     const markerTexture = this.texture(resources.marker);
     const idle = resources.clips.get(clipKey(this.direction, 0));
     if (!idle?.frames[0]) throw new Error("角色缺少預設靜止影格。");
     this.marker = new Sprite(markerTexture);
     this.marker.visible = false;
     this.character = new Sprite(this.texture(idle.frames[0].graphic));
-    this.cursor = new Sprite(cursorTexture);
-    this.cursor.visible = false;
     const { width, height } = resources.map.header;
     this.player = nearestWalkable(
       { x: Math.floor(width / 2), y: Math.floor(height / 2) },
@@ -129,9 +126,9 @@ export class WanderGame {
       "1011 地圖畫布；左鍵移動或拖曳平移，右鍵改變朝向，滾輪縮放",
     );
     this.app.canvas.tabIndex = 0;
-    this.app.canvas.style.cursor = "none";
+    this.app.canvas.style.cursor = cursorCssValue(this.resources.cursor);
     this.scene.sortableChildren = true;
-    this.app.stage.addChild(this.world, this.cursor);
+    this.app.stage.addChild(this.world);
     this.world.addChild(this.ground, this.scene, this.marker);
     this.renderMap();
     this.scene.addChild(this.character);
@@ -203,11 +200,9 @@ export class WanderGame {
   private bindInput() {
     const canvas = this.app.canvas;
     canvas.addEventListener("pointerenter", (event) => {
-      this.cursor.visible = true;
       this.movePointer(event);
     });
     canvas.addEventListener("pointerleave", () => {
-      this.cursor.visible = false;
       this.marker.visible = false;
       this.hover = undefined;
       this.emitStatus();
@@ -274,11 +269,6 @@ export class WanderGame {
   }
 
   private movePointer(event: PointerEvent) {
-    const rect = this.app.canvas.getBoundingClientRect();
-    this.cursor.position.set(
-      event.clientX - rect.left + this.resources.cursor.offX,
-      event.clientY - rect.top + this.resources.cursor.offY,
-    );
     const cell = this.tileFromPointer(event.clientX, event.clientY);
     if (!this.validCell(cell)) {
       this.marker.visible = false;
