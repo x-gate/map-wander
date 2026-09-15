@@ -8,6 +8,11 @@ import {
 import type { DecodedGraphic } from "../resources/binary";
 import { clipKey } from "../resources/game-resources";
 import type { LoadedGame } from "../resources/game-resources";
+import {
+  advanceAnimationClock,
+  loopFrameIndex,
+  type AnimationClock,
+} from "./animation";
 import { clampZoom, screenTile, tilePosition } from "./geometry";
 import {
   buildWalkability,
@@ -64,7 +69,7 @@ export class WanderGame {
   private segment?: Segment;
   private direction = 4;
   private pendingDirection?: number;
-  private animationElapsed = 0;
+  private animationClock: AnimationClock = { action: 0, elapsed: 0 };
   private dragging?: { id: number; x: number; y: number; moved: boolean };
   private observer?: ResizeObserver;
   private message = "左鍵移動，右鍵改變朝向";
@@ -132,7 +137,7 @@ export class WanderGame {
     this.scene.addChild(this.character);
     this.fit();
     this.bindInput();
-    this.updateCharacter();
+    this.updateCharacter(0);
     this.app.ticker.add((ticker) => this.tick(ticker.deltaMS));
     this.observer = new ResizeObserver(() => this.fit());
     this.observer.observe(this.host);
@@ -323,27 +328,27 @@ export class WanderGame {
     }
     this.route = [];
     this.target = undefined;
-    this.animationElapsed = 0;
     if (this.segment) {
       this.pendingDirection = direction;
       this.message = `完成目前一步後轉向方向 ${direction}`;
     } else {
       this.direction = direction;
+      this.animationClock = { action: 0, elapsed: 0 };
       this.message = `已轉向方向 ${direction}`;
-      this.updateCharacter();
+      this.updateCharacter(0);
     }
     this.emitStatus();
   }
 
   private tick(deltaMS: number) {
+    const elapsed = Math.min(deltaMS, 50);
     if (!this.segment && this.route.length) {
       const to = this.route.shift()!;
       this.segment = { from: this.player, to, elapsed: 0 };
       this.direction = directionFor(this.player, to);
-      this.animationElapsed = 0;
     }
     if (this.segment) {
-      this.segment.elapsed += deltaMS;
+      this.segment.elapsed += elapsed;
       if (this.segment.elapsed >= STEP_DURATION) {
         this.player = this.segment.to;
         this.segment = undefined;
@@ -353,24 +358,30 @@ export class WanderGame {
             this.pendingDirection = undefined;
           }
           this.target = undefined;
-          this.animationElapsed = 0;
           this.message = `已停在 (${this.player.x}, ${this.player.y})，方向 ${this.direction}`;
           this.emitStatus();
         }
       }
     }
-    this.animationElapsed += deltaMS;
-    this.updateCharacter();
+    this.updateCharacter(elapsed);
   }
 
-  private updateCharacter() {
+  private updateCharacter(deltaMS: number) {
     const action: 0 | 1 = this.segment || this.route.length ? 1 : 0;
+    this.animationClock = advanceAnimationClock(
+      this.animationClock,
+      action,
+      deltaMS,
+    );
     const clip = this.resources.clips.get(clipKey(this.direction, action));
     if (!clip?.frames.length) return;
-    const frameDuration = clip.duration / clip.frames.length;
     const frame =
       clip.frames[
-        Math.floor((this.animationElapsed % clip.duration) / frameDuration)
+        loopFrameIndex(
+          this.animationClock.elapsed,
+          clip.duration,
+          clip.frames.length,
+        )
       ];
     const from = this.segment?.from ?? this.player;
     const to = this.segment?.to ?? this.player;
