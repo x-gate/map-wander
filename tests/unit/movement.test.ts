@@ -5,6 +5,7 @@ import {
   directionToward,
   DIRECTION_DELTAS,
   findPath,
+  movementStepDuration,
   nearestWalkable,
 } from "../../src/game/movement";
 
@@ -46,6 +47,13 @@ test("方向 0 從西北開始並順時針對應八方位", () => {
 test("轉向使用目標格位相對方向，同一格則維持原朝向", () => {
   expect(directionToward({ x: 5, y: 5 }, { x: 2, y: 8 })).toBe(5);
   expect(directionToward({ x: 5, y: 5 }, { x: 5, y: 5 })).toBeNull();
+});
+
+test("雙軸斜向移動依根號二距離延長時間", () => {
+  expect(movementStepDuration({ x: 2, y: 2 }, { x: 3, y: 2 }, 190)).toBe(190);
+  expect(movementStepDuration({ x: 2, y: 2 }, { x: 3, y: 3 }, 190)).toBeCloseTo(
+    190 * Math.SQRT2,
+  );
 });
 
 test("A* 會繞過障礙抵達指定格位", () => {

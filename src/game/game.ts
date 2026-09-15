@@ -20,6 +20,7 @@ import {
   directionFor,
   directionToward,
   findPath,
+  movementStepDuration,
   nearestWalkable,
   type Cell,
 } from "./movement";
@@ -30,6 +31,7 @@ interface Segment {
   from: Cell;
   to: Cell;
   elapsed: number;
+  duration: number;
 }
 
 export interface GameStatus {
@@ -334,12 +336,17 @@ export class WanderGame {
     const elapsed = Math.min(deltaMS, 50);
     if (!this.segment && this.route.length) {
       const to = this.route.shift()!;
-      this.segment = { from: this.player, to, elapsed: 0 };
+      this.segment = {
+        from: this.player,
+        to,
+        elapsed: 0,
+        duration: movementStepDuration(this.player, to, STEP_DURATION),
+      };
       this.direction = directionFor(this.player, to);
     }
     if (this.segment) {
       this.segment.elapsed += elapsed;
-      if (this.segment.elapsed >= STEP_DURATION) {
+      if (this.segment.elapsed >= this.segment.duration) {
         this.player = this.segment.to;
         this.segment = undefined;
         if (!this.route.length) {
@@ -376,7 +383,7 @@ export class WanderGame {
     const from = this.segment?.from ?? this.player;
     const to = this.segment?.to ?? this.player;
     const progress = this.segment
-      ? Math.min(1, this.segment.elapsed / STEP_DURATION)
+      ? Math.min(1, this.segment.elapsed / this.segment.duration)
       : 1;
     const a = tilePosition(from.x, from.y, this.resources.map.header.width);
     const b = tilePosition(to.x, to.y, this.resources.map.header.width);

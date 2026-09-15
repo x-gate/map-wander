@@ -43,6 +43,18 @@ export function directionToward(from: Cell, target: Cell) {
   return directionFor(from, target);
 }
 
+export function movementStepDuration(
+  from: Cell,
+  to: Cell,
+  straightDuration: number,
+) {
+  const dx = Math.abs(to.x - from.x);
+  const dy = Math.abs(to.y - from.y);
+  if (Math.max(dx, dy) !== 1 || straightDuration <= 0)
+    throw new Error("移動時間只能計算有效的相鄰格位。");
+  return straightDuration * (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1);
+}
+
 export function buildWalkability(
   map: CollisionMap,
   records: Map<number, CollisionRecord>,
