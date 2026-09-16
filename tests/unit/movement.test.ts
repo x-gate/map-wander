@@ -26,7 +26,7 @@ test("碰撞網格套用地面 access 與多格物件占地", () => {
   ]).toEqual([0, 0, 1, 1, 0, 1]);
 });
 
-test("不可穿越物件依 grid_w 與 grid_h 封鎖完整占地", () => {
+test("不可穿越物件向正 x 與負 y 展開 grid_w 與 grid_h", () => {
   const records = new Map([
     [10, { access: 1, asGround: false, gridWidth: 1, gridHeight: 1 }],
     [20, { access: 0, asGround: false, gridWidth: 2, gridHeight: 2 }],
@@ -40,7 +40,24 @@ test("不可穿越物件依 grid_w 與 grid_h 封鎖完整占地", () => {
       },
       records,
     ),
-  ]).toEqual([1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1]);
+  ]).toEqual([1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1]);
+});
+
+test("1x2 物件封鎖錨點與前一個 y 格位", () => {
+  const records = new Map([
+    [10, { access: 1, asGround: false, gridWidth: 1, gridHeight: 1 }],
+    [17159, { access: 0, asGround: false, gridWidth: 1, gridHeight: 2 }],
+  ]);
+  expect([
+    ...buildWalkability(
+      {
+        header: { width: 1, height: 4 },
+        ground: [10, 10, 10, 10],
+        object: [0, 0, 17159, 0],
+      },
+      records,
+    ),
+  ]).toEqual([1, 0, 0, 1]);
 });
 
 test("方向 0 從西北開始並順時針對應八方位", () => {

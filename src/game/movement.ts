@@ -72,8 +72,13 @@ export function buildWalkability(
       for (let offsetY = 0; offsetY < gridHeight; offsetY++)
         for (let offsetX = 0; offsetX < gridWidth; offsetX++) {
           const blockedX = x + offsetX;
-          const blockedY = y + offsetY;
-          if (blockedX < width && blockedY < height)
+          const blockedY = y - offsetY;
+          if (
+            blockedX >= 0 &&
+            blockedY >= 0 &&
+            blockedX < width &&
+            blockedY < height
+          )
             result[blockedY * width + blockedX] = 0;
         }
     }
