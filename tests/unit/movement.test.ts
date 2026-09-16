@@ -5,6 +5,7 @@ import {
   directionToward,
   DIRECTION_DELTAS,
   findPath,
+  findPathToward,
   movementStepDuration,
   nearestWalkable,
 } from "../../src/game/movement";
@@ -115,6 +116,35 @@ test("A* 不會穿過被兩側障礙夾住的斜角", () => {
       (x, y) => !blocked.has(`${x},${y}`),
     ),
   ).toBeNull();
+});
+
+test("點擊不可穿越格位時走到障礙物前一格", () => {
+  const blocked = new Set(["3,0"]);
+  expect(
+    findPathToward(
+      { x: 0, y: 0 },
+      { x: 3, y: 0 },
+      4,
+      1,
+      (x, y) => !blocked.has(`${x},${y}`),
+    ),
+  ).toEqual([
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 2, y: 0 },
+  ]);
+});
+
+test("目標位於隔離區域時走到可達區域中最接近的格位", () => {
+  const blocked = new Set(["2,0", "2,1", "2,2"]);
+  const path = findPathToward(
+    { x: 0, y: 1 },
+    { x: 4, y: 1 },
+    5,
+    3,
+    (x, y) => !blocked.has(`${x},${y}`),
+  );
+  expect(path?.at(-1)).toEqual({ x: 1, y: 1 });
 });
 
 test("起點被擋住時可找出最近的可行走格位", () => {

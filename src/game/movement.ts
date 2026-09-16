@@ -92,23 +92,40 @@ const octile = (a: Cell, b: Cell) => {
   return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
 };
 
-export function findPath(
+function searchPath(
   start: Cell,
   goal: Cell,
   width: number,
   height: number,
   walkable: (x: number, y: number) => boolean,
+  closest: boolean,
 ): Cell[] | null {
   const inside = (x: number, y: number) =>
     x >= 0 && y >= 0 && x < width && y < height;
   if (!inside(start.x, start.y) || !inside(goal.x, goal.y)) return null;
-  if (!walkable(goal.x, goal.y)) return null;
+  if (!closest && !walkable(goal.x, goal.y)) return null;
   if (start.x === goal.x && start.y === goal.y) return [start];
 
   const open = new Map<string, { cell: Cell; score: number }>();
   const costs = new Map([[cellKey(start), 0]]);
   const cameFrom = new Map<string, Cell>();
-  open.set(cellKey(start), { cell: start, score: octile(start, goal) });
+  const startKey = cellKey(start);
+  open.set(startKey, { cell: start, score: octile(start, goal) });
+  let closestKey = startKey;
+  let closestCell = start;
+  let closestDistance = octile(start, goal);
+  let closestCost = 0;
+
+  const pathTo = (key: string, cell: Cell) => {
+    const path = [cell];
+    let cursor = key;
+    while (cameFrom.has(cursor)) {
+      const previous = cameFrom.get(cursor)!;
+      path.push(previous);
+      cursor = cellKey(previous);
+    }
+    return path.reverse();
+  };
 
   while (open.size) {
     const currentEntry = [...open.entries()].reduce((best, entry) =>
@@ -116,16 +133,19 @@ export function findPath(
     );
     const [currentKey, { cell: current }] = currentEntry;
     open.delete(currentKey);
-    if (current.x === goal.x && current.y === goal.y) {
-      const path = [current];
-      let cursor = currentKey;
-      while (cameFrom.has(cursor)) {
-        const previous = cameFrom.get(cursor)!;
-        path.push(previous);
-        cursor = cellKey(previous);
-      }
-      return path.reverse();
+    const currentDistance = octile(current, goal);
+    const currentCost = costs.get(currentKey) ?? Infinity;
+    if (
+      currentDistance < closestDistance ||
+      (currentDistance === closestDistance && currentCost < closestCost)
+    ) {
+      closestKey = currentKey;
+      closestCell = current;
+      closestDistance = currentDistance;
+      closestCost = currentCost;
     }
+    if (current.x === goal.x && current.y === goal.y)
+      return pathTo(currentKey, current);
 
     for (const [dx, dy] of DIRECTION_DELTAS) {
       const next = { x: current.x + dx, y: current.y + dy };
@@ -148,7 +168,27 @@ export function findPath(
       open.set(nextKey, { cell: next, score: cost + octile(next, goal) });
     }
   }
-  return null;
+  return closest ? pathTo(closestKey, closestCell) : null;
+}
+
+export function findPath(
+  start: Cell,
+  goal: Cell,
+  width: number,
+  height: number,
+  walkable: (x: number, y: number) => boolean,
+) {
+  return searchPath(start, goal, width, height, walkable, false);
+}
+
+export function findPathToward(
+  start: Cell,
+  goal: Cell,
+  width: number,
+  height: number,
+  walkable: (x: number, y: number) => boolean,
+) {
+  return searchPath(start, goal, width, height, walkable, true);
 }
 
 export function nearestWalkable(

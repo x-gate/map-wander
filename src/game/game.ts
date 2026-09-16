@@ -24,7 +24,7 @@ import {
   buildWalkability,
   directionFor,
   directionToward,
-  findPath,
+  findPathToward,
   movementStepDuration,
   nearestWalkable,
   type Cell,
@@ -322,7 +322,7 @@ export class WanderGame {
   private moveTo(goal: Cell) {
     const { width, height } = this.resources.map.header;
     const start = this.segment?.to ?? this.player;
-    const route = findPath(start, goal, width, height, (x, y) =>
+    const route = findPathToward(start, goal, width, height, (x, y) =>
       this.isWalkable(x, y),
     );
     if (!route) {
@@ -334,8 +334,16 @@ export class WanderGame {
     this.cameraFollowing = true;
     this.pendingDirection = undefined;
     this.target = goal;
-    this.message =
-      route.length === 1 ? "角色已在指定格位" : `前往 (${goal.x}, ${goal.y})`;
+    const destination = route[route.length - 1];
+    const reachesGoal = destination.x === goal.x && destination.y === goal.y;
+    if (route.length === 1)
+      this.message = reachesGoal
+        ? "角色已在指定格位"
+        : `朝向 (${goal.x}, ${goal.y}) 的路徑已被障礙物阻擋`;
+    else
+      this.message = reachesGoal
+        ? `前往 (${goal.x}, ${goal.y})`
+        : `朝向 (${goal.x}, ${goal.y}) 移動，將停在 (${destination.x}, ${destination.y})`;
     this.emitStatus();
   }
 
