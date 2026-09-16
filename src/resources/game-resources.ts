@@ -1,9 +1,7 @@
 import type * as Contract from "../../.generated/xglib/contract";
 import { animeHeader, GraphicArchive, loadAnime } from "./binary";
-import type { DecodedGraphic, GraphicCollision, GraphicRecord } from "./binary";
+import type { DecodedGraphic, GraphicRecord } from "./binary";
 import type { GameFiles } from "./catalog";
-
-export const INVISIBLE_BLOCKER_MAP_ID = 2;
 
 export interface AnimationClip {
   direction: number;
@@ -20,7 +18,6 @@ export interface LoadedGame {
   map: Contract.Map;
   mapGraphics: Map<number, DecodedGraphic>;
   mapRecords: Map<number, GraphicRecord>;
-  collisionRecords: Map<number, GraphicCollision>;
   cursor: DecodedGraphic;
   marker: DecodedGraphic;
   clips: Map<string, AnimationClip>;
@@ -31,22 +28,6 @@ export interface LoadedGame {
 
 export const clipKey = (direction: number, action: 0 | 1) =>
   `${direction}:${action}`;
-
-export function collisionRecordsForMap(
-  records: Map<number, GraphicRecord>,
-  objectIds: Iterable<number>,
-) {
-  const collisions = new Map<number, GraphicCollision>(records);
-  for (const id of objectIds)
-    if (id === INVISIBLE_BLOCKER_MAP_ID && !collisions.has(id))
-      collisions.set(id, {
-        access: 0,
-        asGround: false,
-        gridWidth: 1,
-        gridHeight: 1,
-      });
-  return collisions;
-}
 
 export async function loadGame(
   parser: typeof Contract,
@@ -158,16 +139,10 @@ export async function loadGame(
     if (decodedTiles % 10 === 0)
       onProgress(`解碼地圖圖塊… ${decodedTiles}/${ids.size}`);
   }
-  // 1011.dat uses object map ID 2 as an invisible one-cell blocker. It is
-  // absent from GraphicInfo_66, while all audited cross-source candidates
-  // agree on access=0, grid_w=1, grid_h=1, and AsGround=false.
-  const collisionRecords = collisionRecordsForMap(mapRecords, map.object);
-
   return {
     map,
     mapGraphics,
     mapRecords,
-    collisionRecords,
     cursor,
     marker,
     clips,

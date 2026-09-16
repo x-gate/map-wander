@@ -81,10 +81,7 @@ export class WanderGame {
     private host: HTMLElement,
     private resources: LoadedGame,
   ) {
-    this.walkability = buildWalkability(
-      resources.map,
-      resources.collisionRecords,
-    );
+    this.walkability = buildWalkability(resources.map, resources.mapRecords);
     const markerTexture = this.texture(resources.marker);
     const idle = resources.clips.get(clipKey(this.direction, 0));
     if (!idle?.frames[0]) throw new Error("角色缺少預設靜止影格。");
