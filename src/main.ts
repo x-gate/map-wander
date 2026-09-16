@@ -1,4 +1,5 @@
 import { WanderGame } from "./game/game";
+import npcDefinitions from "virtual:map-npcs";
 import {
   directoryPicker,
   fromDirectory,
@@ -85,9 +86,14 @@ async function start(files: GameFiles) {
   try {
     welcomeStatus.textContent = "啟動 xglib 解析器…";
     await initializeParser();
-    const resources = await loadGame(parser, files, (message) => {
-      welcomeStatus.textContent = message;
-    });
+    const resources = await loadGame(
+      parser,
+      files,
+      (message) => {
+        welcomeStatus.textContent = message;
+      },
+      npcDefinitions,
+    );
     welcomeStatus.textContent = "建立 PixiJS 場景…";
     welcome.hidden = true;
     gameShell.hidden = false;
@@ -107,6 +113,10 @@ async function start(files: GameFiles) {
         : "") +
       (resources.missingMapIds.length
         ? `；Graphic_66 無對應地圖圖像 ID：${resources.missingMapIds.join("、")}，該物件層保持透明。`
+        : "") +
+      `；NPC：${resources.npcs.length} 筆` +
+      (resources.missingNpcGraphicMapIds.length
+        ? `（Graphic_66 無對應 MapID：${resources.missingNpcGraphicMapIds.join("、")}）`
         : "");
   } catch (error) {
     game?.destroy();

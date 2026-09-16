@@ -2,6 +2,7 @@ import {
   Application,
   BufferImageSource,
   Container,
+  RenderLayer,
   Sprite,
   Texture,
 } from "pixi.js";
@@ -64,6 +65,8 @@ export class WanderGame {
   private world = new Container();
   private ground = new Container();
   private scene = new Container();
+  private npcLayer = new Container();
+  private depthLayer = new RenderLayer({ sortableChildren: true });
   private marker: Sprite;
   private character: Sprite;
   private textures: Texture[] = [];
@@ -136,11 +139,13 @@ export class WanderGame {
     );
     this.app.canvas.tabIndex = 0;
     this.app.canvas.style.cursor = cursorCssValue(this.resources.cursor);
-    this.scene.sortableChildren = true;
     this.app.stage.addChild(this.world);
-    this.world.addChild(this.ground, this.scene, this.marker);
+    this.world.addChild(this.ground, this.scene, this.depthLayer, this.marker);
+    this.scene.addChild(this.npcLayer);
     this.renderMap();
+    this.renderNpcs();
     this.scene.addChild(this.character);
+    this.depthLayer.attach(this.character);
     this.fit();
     this.bindInput();
     this.updateCharacter(0);
@@ -169,9 +174,27 @@ export class WanderGame {
           else {
             sprite.zIndex = point.y;
             this.scene.addChild(sprite);
+            this.depthLayer.attach(sprite);
           }
         }
       }
+  }
+
+  private renderNpcs() {
+    const width = this.resources.map.header.width;
+    for (const npc of this.resources.npcs) {
+      const position = npc.positions[0];
+      const point = tilePosition(position.x, position.y, width);
+      const sprite = new Sprite(this.texture(npc.graphic));
+      sprite.label = `npc:${npc.sourceLine}:direction:${npc.direction}`;
+      sprite.position.set(
+        point.x + npc.graphic.offX,
+        point.y + npc.graphic.offY,
+      );
+      sprite.zIndex = point.y + 0.25;
+      this.npcLayer.addChild(sprite);
+      this.depthLayer.attach(sprite);
+    }
   }
 
   private fit() {

@@ -2,6 +2,7 @@ import type * as Contract from "../../.generated/xglib/contract";
 import { animeHeader, GraphicArchive, loadAnime } from "./binary";
 import type { DecodedGraphic, GraphicRecord } from "./binary";
 import type { GameFiles } from "./catalog";
+import type { NpcDefinition } from "./npc";
 
 export interface AnimationClip {
   direction: number;
@@ -24,6 +25,12 @@ export interface LoadedGame {
   animeRow: number;
   animeDuplicateCount: number;
   missingMapIds: number[];
+  npcs: LoadedNpc[];
+  missingNpcGraphicMapIds: number[];
+}
+
+export interface LoadedNpc extends NpcDefinition {
+  graphic: DecodedGraphic;
 }
 
 export const clipKey = (direction: number, action: 0 | 1) =>
@@ -33,6 +40,7 @@ export async function loadGame(
   parser: typeof Contract,
   files: GameFiles,
   onProgress: (message: string) => void = () => {},
+  npcDefinitions: readonly NpcDefinition[] = [],
 ): Promise<LoadedGame> {
   onProgress("讀取調色盤與索引…");
   const palette = new Uint8Array(
@@ -139,6 +147,44 @@ export async function loadGame(
     if (decodedTiles % 10 === 0)
       onProgress(`解碼地圖圖塊… ${decodedTiles}/${ids.size}`);
   }
+
+  onProgress("解碼 NPC 圖像…");
+  const npcGraphics = new Map<number, DecodedGraphic>();
+  const missingNpcGraphicMapIds = new Set<number>();
+  const npcs: LoadedNpc[] = [];
+  const { width, height } = map.header;
+  for (const definition of npcDefinitions) {
+    if (definition.mapId !== 1011) continue;
+    if (
+      definition.positions.some(
+        ({ x, y }) => x < 0 || y < 0 || x >= width || y >= height,
+      )
+    )
+      throw new Error(
+        `npc.txt 第 ${definition.sourceLine} 行的座標超出 1011 地圖範圍。`,
+      );
+    let graphic = npcGraphics.get(definition.graphicMapId);
+    if (!graphic) {
+      graphic = mapGraphics.get(definition.graphicMapId);
+      if (!graphic) {
+        const record = base.mapGraphic(definition.graphicMapId);
+        if (!record) {
+          missingNpcGraphicMapIds.add(definition.graphicMapId);
+          continue;
+        }
+        graphic = await base.decode(record);
+      }
+      npcGraphics.set(definition.graphicMapId, graphic);
+    }
+    npcs.push({
+      ...definition,
+      positions: definition.positions.map(({ x, y }) => ({
+        x,
+        y,
+      })) as LoadedNpc["positions"],
+      graphic,
+    });
+  }
   return {
     map,
     mapGraphics,
@@ -149,5 +195,7 @@ export async function loadGame(
     animeRow: animeResult.selected.row,
     animeDuplicateCount: animeResult.duplicateCount,
     missingMapIds: missingMapIds.sort((a, b) => a - b),
+    npcs,
+    missingNpcGraphicMapIds: [...missingNpcGraphicMapIds].sort((a, b) => a - b),
   };
 }

@@ -1,6 +1,6 @@
 # x-gate 地圖漫遊試驗
 
-以 PixiJS 8 與同工作區的 `xglib` WASM，在瀏覽器中把動畫角色放進 `1011.dat`，試驗原版風格的游標、格位提示、八方向動畫、左鍵移動與右鍵轉向。
+以 PixiJS 8 與同工作區的 `xglib` WASM，在瀏覽器中把動畫角色與 NPC 放進 `1011.dat`，試驗原版風格的游標、格位提示、八方向動畫、左鍵移動與右鍵轉向。
 
 ## 使用方式
 
@@ -20,8 +20,9 @@ bun run dev
 - `AnimeInfo_4.bin` / `Anime_4.bin`：動畫 ID 100052。
 - `pal/palet_00.cgp`：基礎圖像調色盤。
 - `map/0/1011.dat`：演示地圖。
+- `../cgmsv/gmsv/data/npc.txt`：開發／建置時唯讀解析地圖 1011 的 NPC 數值欄位。
 
-檔案只在本機瀏覽器內解析，沒有上傳端點，也不會寫入、變更或保存遊戲資源。repository 和正式建置不包含這些檔案。
+遊戲根目錄中的檔案只在本機瀏覽器內解析；`npc.txt` 則由 Vite 在本機啟動或建置時讀取。程式只把地圖、座標、朝向與 Graphic MapID 的結構資料交給前端，不帶入 NPC 名稱、對話或腳本欄位。沒有上傳端點，也不會寫入、變更或把原始資源保存至 repository。
 
 ## 操作
 
@@ -34,6 +35,12 @@ bun run dev
 - 滾輪：跟隨中以角色為中心縮放；手動平移後以游標為中心縮放。
 
 方向遵循這個專案的明確契約：0 西北、1 北，之後順時針至 7 西。動畫 ID 100052 在目前參考索引中有同號資料；載入器明確採用索引列 2425，並驗證該列仍為 AnimeID 100052，避免無聲套用其他動畫。
+
+## NPC 圖層
+
+`npc.txt` 以 tab 分欄；程式使用第 9 個值的地圖編號篩選 1011，保留第 10–17 個值的四組座標、第 20 個值的朝向，以及第 21 個值的圖像 MapID。圖像 MapID 透過 `GraphicInfo_66.bin` 的 `map_id` 查找並從 `Graphic_66.bin` 解碼，不會當成 AnimeID 或 GraphicInfo 的列索引。
+
+NPC 保留在獨立的邏輯圖層，並與非地面物件及玩家共用依腳底高度排序的 PixiJS 渲染層。現在 1011 的 NPC 都是四組座標相同的 1×1 記錄，因此以第一組座標作為顯示位置；四組來源座標仍完整保留，未自行推測其餘語意。`npc.txt` 提供的朝向也保留在資料與場景標記中，但目前 MapID 對應的是單張靜態圖像，未推測不存在的方向動畫映射。
 
 ## 碰撞與已知界限
 
@@ -49,11 +56,11 @@ bun run build
 bun run audit:local
 ```
 
-`audit:local` 是選用的唯讀整合驗證：以 SHA-256 比對所有輸入在解析前後未變，輸出尺寸、索引列與動畫幀數，不輸出或保存像素。若遊戲根目錄不在 `../CGoriginmood`，可執行 `bun scripts/audit-local.ts /絕對路徑`。
+`audit:local` 是選用的唯讀整合驗證：以 SHA-256 比對所有遊戲輸入與 `npc.txt` 在解析前後未變，輸出尺寸、索引列、動畫幀數與 NPC Graphic MapID，不輸出或保存像素。若遊戲根目錄不在 `../CGoriginmood`，可執行 `bun scripts/audit-local.ts /絕對路徑`。
 
 ## 架構
 
-- `src/resources/`：固定路徑的本機檔案取得、40-byte GraphicInfo 尋址、12-byte AnimeInfo 尋址與 xglib 解碼。
+- `src/resources/`：固定路徑的本機檔案取得、NPC TSV 結構解析、40-byte GraphicInfo 尋址、12-byte AnimeInfo 尋址與 xglib 解碼。
 - `src/game/geometry.ts`：64×48 等角格位投影。
 - `src/game/movement.ts`：方向契約、A* 與初始可行走格搜尋。
 - `src/game/game.ts`：PixiJS 地圖、角色影格、定位點、游標、鏡頭與輸入。
