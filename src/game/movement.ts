@@ -1,13 +1,8 @@
+import type { GraphicCollision } from "../resources/binary";
+
 export interface Cell {
   x: number;
   y: number;
-}
-
-export interface CollisionRecord {
-  access: number;
-  asGround: boolean;
-  gridWidth: number;
-  gridHeight: number;
 }
 
 export interface CollisionMap {
@@ -57,7 +52,7 @@ export function movementStepDuration(
 
 export function buildWalkability(
   map: CollisionMap,
-  records: Map<number, CollisionRecord>,
+  records: Map<number, GraphicCollision>,
 ) {
   const { width, height } = map.header;
   const result = new Uint8Array(width * height);

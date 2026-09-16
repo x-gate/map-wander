@@ -3,7 +3,14 @@ import type * as Contract from "../../.generated/xglib/contract";
 export const GRAPHIC_INFO_SIZE = 40;
 export const ANIME_INFO_SIZE = 12;
 
-export interface GraphicRecord {
+export interface GraphicCollision {
+  gridWidth: number;
+  gridHeight: number;
+  access: number;
+  asGround: boolean;
+}
+
+export interface GraphicRecord extends GraphicCollision {
   row: number;
   id: number;
   addr: number;
@@ -12,10 +19,6 @@ export interface GraphicRecord {
   offY: number;
   width: number;
   height: number;
-  gridWidth: number;
-  gridHeight: number;
-  access: number;
-  asGround: boolean;
   mapId: number;
 }
 

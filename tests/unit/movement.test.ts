@@ -26,6 +26,23 @@ test("碰撞網格套用地面 access 與多格物件占地", () => {
   ]).toEqual([0, 0, 1, 1, 0, 1]);
 });
 
+test("不可穿越物件依 grid_w 與 grid_h 封鎖完整占地", () => {
+  const records = new Map([
+    [10, { access: 1, asGround: false, gridWidth: 1, gridHeight: 1 }],
+    [20, { access: 0, asGround: false, gridWidth: 2, gridHeight: 2 }],
+  ]);
+  expect([
+    ...buildWalkability(
+      {
+        header: { width: 4, height: 3 },
+        ground: Array(12).fill(10),
+        object: [0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0],
+      },
+      records,
+    ),
+  ]).toEqual([1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1]);
+});
+
 test("方向 0 從西北開始並順時針對應八方位", () => {
   expect(DIRECTION_DELTAS).toEqual([
     [0, -1],
