@@ -14,7 +14,12 @@ import {
   type AnimationClock,
 } from "./animation";
 import { cursorCssValue } from "./cursor";
-import { clampZoom, screenTile, tilePosition } from "./geometry";
+import {
+  cameraPosition,
+  clampZoom,
+  screenTile,
+  tilePosition,
+} from "./geometry";
 import {
   buildWalkability,
   directionFor,
@@ -72,6 +77,8 @@ export class WanderGame {
   private direction = 4;
   private pendingDirection?: number;
   private animationClock: AnimationClock = { action: 0, elapsed: 0 };
+  private cameraFollowing = true;
+  private characterFoot?: { x: number; y: number };
   private dragging?: { id: number; x: number; y: number; moved: boolean };
   private observer?: ResizeObserver;
   private message = "左鍵移動，右鍵改變朝向";
@@ -179,10 +186,23 @@ export class WanderGame {
       ),
     );
     this.world.scale.set(zoom);
-    this.world.position.set(
-      this.host.clientWidth / 2 - (height - width) * 16 * zoom,
-      this.host.clientHeight / 2 - (width + height) * 12 * zoom + 70,
+    if (this.cameraFollowing && this.characterFoot)
+      this.centerCameraOn(this.characterFoot);
+    else
+      this.world.position.set(
+        this.host.clientWidth / 2 - (height - width) * 16 * zoom,
+        this.host.clientHeight / 2 - (width + height) * 12 * zoom + 70,
+      );
+  }
+
+  private centerCameraOn(point: { x: number; y: number }) {
+    const position = cameraPosition(
+      point,
+      this.host.clientWidth,
+      this.host.clientHeight,
+      this.world.scale.x,
     );
+    this.world.position.set(position.x, position.y);
   }
 
   private tileFromPointer(clientX: number, clientY: number) {
@@ -214,7 +234,10 @@ export class WanderGame {
       if (drag && drag.id === event.pointerId) {
         const dx = event.clientX - drag.x;
         const dy = event.clientY - drag.y;
-        if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+        if (Math.abs(dx) + Math.abs(dy) > 2) {
+          drag.moved = true;
+          this.cameraFollowing = false;
+        }
         this.world.x += dx;
         this.world.y += dy;
         drag.x = event.clientX;
@@ -259,6 +282,11 @@ export class WanderGame {
         const y = event.clientY - rect.top;
         const current = this.world.scale.x;
         const next = clampZoom(current * Math.exp(-event.deltaY * 0.0015));
+        if (this.cameraFollowing && this.characterFoot) {
+          this.world.scale.set(next);
+          this.centerCameraOn(this.characterFoot);
+          return;
+        }
         const ratio = next / current;
         this.world.position.set(
           x - (x - this.world.x) * ratio,
@@ -303,6 +331,7 @@ export class WanderGame {
       return;
     }
     this.route = route.slice(1);
+    this.cameraFollowing = true;
     this.pendingDirection = undefined;
     this.target = goal;
     this.message =
@@ -391,12 +420,14 @@ export class WanderGame {
       x: a.x + (b.x - a.x) * progress,
       y: a.y + (b.y - a.y) * progress,
     };
+    this.characterFoot = foot;
     this.character.texture = this.texture(frame.graphic);
     this.character.position.set(
       foot.x + frame.graphic.offX + frame.offsetX,
       foot.y + frame.graphic.offY + frame.offsetY,
     );
     this.character.zIndex = foot.y + 0.5;
+    if (this.cameraFollowing) this.centerCameraOn(foot);
   }
 
   private emitStatus() {

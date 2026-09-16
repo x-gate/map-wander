@@ -20,3 +20,15 @@ export function screenTile(px: number, py: number, width: number) {
 export function clampZoom(value: number) {
   return Math.min(3, Math.max(0.35, value));
 }
+
+export function cameraPosition(
+  target: { x: number; y: number },
+  viewportWidth: number,
+  viewportHeight: number,
+  scale: number,
+) {
+  return {
+    x: viewportWidth / 2 - target.x * scale,
+    y: viewportHeight / 2 - target.y * scale,
+  };
+}
