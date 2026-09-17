@@ -4,6 +4,7 @@ import {
   fromDirectory,
   fromFileList,
   REQUIRED_PATHS,
+  staticMap,
 } from "../../src/resources/catalog";
 
 function file(path: string) {
@@ -23,11 +24,12 @@ test("相容模式驗證共用資源與至少一張地圖，不再依賴 1011", 
   expect(() => fromFileList(REQUIRED_PATHS.map(file))).toThrow("找不到地圖");
 });
 
-test("列出多層地圖並保留同名檔案來源，預設優先選擇 1011", async () => {
+test("列出多層地圖並保留同名檔案來源，預設優先選擇 1530", async () => {
   const result = fromFileList([
     ...REQUIRED_PATHS.map(file),
     file("Assets/map/1/5/1011.dat"),
     file("Assets/map/0/1011.dat"),
+    file("Assets/map/0/1530.dat"),
     file("Assets/map/0/20.dat"),
     file("Assets/map/0/3.dat"),
     file("Assets/map/0/ignore.txt"),
@@ -37,10 +39,13 @@ test("列出多層地圖並保留同名檔案來源，預設優先選擇 1011", 
     "Assets/map/0/3.dat",
     "Assets/map/0/20.dat",
     "Assets/map/0/1011.dat",
+    "Assets/map/0/1530.dat",
     "Assets/map/1/5/1011.dat",
   ]);
-  expect(defaultMap(result.maps).path).toBe("Assets/map/0/1011.dat");
-  expect(result.maps[3].npcMapId).toBeNull();
+  expect(defaultMap(result.maps).path).toBe("Assets/map/0/1530.dat");
+  expect(result.maps[4].npcMapId).toBeNull();
+  expect(staticMap(result.maps, 1011)?.path).toBe("Assets/map/0/1011.dat");
+  expect(staticMap([result.maps[4]], 1011)).toBeUndefined();
   expect((await result.maps[0].getFile()).name).toBe("3.dat");
 });
 

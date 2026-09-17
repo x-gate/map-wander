@@ -1,8 +1,12 @@
 import { WanderGame } from "./game/game";
 import npcCatalog from "virtual:map-npcs";
+import warpData from "virtual:map-warps";
+import { buildWarpIndex } from "./game/warp";
+import { START_MAP_ID, START_POSITION, type SpawnPoint } from "./game/spawn";
 import {
   directoryPicker,
   defaultMap,
+  staticMap,
   fromDirectory,
   fromFileList,
   REQUIRED_PATHS,
@@ -10,6 +14,9 @@ import {
 import type { GameCatalog, MapFile } from "./resources/catalog";
 import { loadGame } from "./resources/game-resources";
 import { initializeParser, parser } from "./resources/wasm";
+import type { WarpDefinition } from "./resources/warp";
+
+const warpIndex = buildWarpIndex(warpData.warps);
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -47,6 +54,7 @@ app.innerHTML = `
       <aside class="hud" aria-live="polite">
         <div><span>目前地圖</span><strong id="current-map">—</strong></div>
         <div><span>角色</span><strong id="player-coordinate">—</strong></div>
+        <div><span>朝向</span><strong id="player-direction">—</strong></div>
         <div><span>游標格位</span><strong id="hover-coordinate">—</strong></div>
         <p id="movement-status">左鍵移動，右鍵改變朝向</p>
       </aside>
@@ -80,6 +88,9 @@ const loadMapButton = document.querySelector<HTMLButtonElement>("#load-map")!;
 const mapCount = document.querySelector<HTMLElement>("#map-count")!;
 const mapStatus = document.querySelector<HTMLElement>("#map-status")!;
 const currentMap = document.querySelector<HTMLElement>("#current-map")!;
+const playerDirection =
+  document.querySelector<HTMLElement>("#player-direction")!;
+const directionNames = ["西北", "北", "東北", "東", "東南", "南", "西南", "西"];
 
 folderInput.setAttribute("webkitdirectory", "");
 let game: WanderGame | undefined;
@@ -92,9 +103,10 @@ function setLoading(value: boolean) {
   chooseButton.disabled = value;
   compatButton.toggleAttribute("disabled", value);
   changeButton.disabled = value;
-  mapSelect.disabled = value || !mapSelect.options.length;
+  mapSelect.disabled = value || !mapSelect.value;
   mapSearch.disabled = value;
-  loadMapButton.disabled = value || !mapSelect.options.length;
+  loadMapButton.disabled = value || !mapSelect.value;
+  game?.setTransitioning(value);
 }
 
 function filterMaps() {
@@ -126,7 +138,10 @@ async function openCatalog(next: GameCatalog) {
   await start(selected);
 }
 
-async function start(selectedMap: MapFile) {
+async function start(
+  selectedMap: MapFile,
+  spawn = selectedMap.npcMapId === START_MAP_ID ? START_POSITION : undefined,
+) {
   if (loading || !catalog) return;
   setLoading(true);
   welcomeStatus.classList.remove("error");
@@ -156,7 +171,11 @@ async function start(selectedMap: MapFile) {
     nextHost.className = "map-view";
     nextHost.style.visibility = "hidden";
     canvasHost.append(nextHost);
-    nextGame = new WanderGame(nextHost, resources);
+    const mapWarps =
+      selectedMap.npcMapId === null
+        ? undefined
+        : warpIndex.maps.get(selectedMap.npcMapId);
+    nextGame = new WanderGame(nextHost, resources, spawn, mapWarps);
     await nextGame.initialize();
     // Publish only a fully initialized scene. Failed loads leave the old scene usable.
     game?.destroy();
@@ -168,13 +187,18 @@ async function start(selectedMap: MapFile) {
     nextHost = undefined;
     game.onStatus = (status) => {
       playerCoordinate.textContent = `(${status.player.x}, ${status.player.y})`;
+      playerDirection.textContent = directionNames[status.direction];
       hoverCoordinate.textContent = status.hover
         ? `(${status.hover.x}, ${status.hover.y})`
         : "—";
       movementStatus.textContent = status.message;
     };
+    game.onWarp = (warp, direction) => void travel(warp, direction);
     game.publishStatus();
     currentMap.textContent = selectedMap.path.replace(/^Assets\/map\//i, "");
+    mapSearch.value = "";
+    filterMaps();
+    mapSelect.value = selectedMap.path;
     mapStatus.textContent = "";
     resourceNote.textContent =
       `動畫 100052 使用索引列 ${resources.animeRow}` +
@@ -192,7 +216,12 @@ async function start(selectedMap: MapFile) {
         ? `；NPC 資料略過 ${resources.npcIssues.length} 筆`
         : "") +
       (selectedMap.npcMapId === null ? "；此目錄尚未定義 NPC 地圖對應" : "");
-    resourceNote.title = resources.npcIssues.join("\n");
+    resourceNote.textContent += `；傳送點：${mapWarps?.size ?? 0} 處`;
+    resourceNote.title = [
+      ...resources.npcIssues,
+      ...warpData.issues,
+      ...warpIndex.issues,
+    ].join("\n");
   } catch (error) {
     nextGame?.destroy();
     nextHost?.remove();
@@ -203,9 +232,23 @@ async function start(selectedMap: MapFile) {
     welcomeStatus.classList.add("error");
     mapStatus.textContent = message;
     mapStatus.classList.add("error");
+    game?.setTransitioning(false, message);
   } finally {
     setLoading(false);
   }
+}
+
+async function travel(warp: WarpDefinition, direction: number) {
+  if (loading || !catalog) return;
+  const destination = staticMap(catalog.maps, warp.to.mapId);
+  if (!destination) {
+    mapStatus.textContent = `無法傳送：缺少地圖 Assets/map/0/${warp.to.mapId}.dat`;
+    mapStatus.classList.add("error");
+    game?.setTransitioning(false, mapStatus.textContent);
+    return;
+  }
+  const spawn: SpawnPoint = { x: warp.to.x, y: warp.to.y, direction };
+  await start(destination, spawn);
 }
 
 async function chooseDirectory() {

@@ -27,9 +27,11 @@ import {
   directionToward,
   findPathToward,
   movementStepDuration,
-  nearestWalkable,
   type Cell,
 } from "./movement";
+import { resolveSpawn, type SpawnPoint } from "./spawn";
+import { warpOnStep, type MapWarps } from "./warp";
+import type { WarpDefinition } from "../resources/warp";
 
 const STEP_DURATION = 190;
 
@@ -42,6 +44,7 @@ interface Segment {
 
 export interface GameStatus {
   player: Cell;
+  direction: number;
   hover?: Cell;
   target?: Cell;
   message: string;
@@ -77,7 +80,7 @@ export class WanderGame {
   private target?: Cell;
   private route: Cell[] = [];
   private segment?: Segment;
-  private direction = 4;
+  private direction: number;
   private pendingDirection?: number;
   private animationClock: AnimationClock = { action: 0, elapsed: 0 };
   private cameraFollowing = true;
@@ -85,21 +88,27 @@ export class WanderGame {
   private dragging?: { id: number; x: number; y: number; moved: boolean };
   private observer?: ResizeObserver;
   private initialized = false;
+  private transitioning = false;
   private message = "左鍵移動，右鍵改變朝向";
   onStatus: (status: GameStatus) => void = () => {};
+  onWarp: (warp: WarpDefinition, direction: number) => void = () => {};
 
   constructor(
     private host: HTMLElement,
     private resources: LoadedGame,
+    spawn?: SpawnPoint,
+    private warps: MapWarps = new Map(),
   ) {
     this.walkability = buildWalkability(resources.map, resources.mapRecords);
     const { width, height } = resources.map.header;
-    this.player = nearestWalkable(
-      { x: Math.floor(width / 2), y: Math.floor(height / 2) },
+    const start = resolveSpawn(
       width,
       height,
       (x, y) => this.isWalkable(x, y),
+      spawn,
     );
+    this.player = { x: start.x, y: start.y };
+    this.direction = start.direction;
     const markerTexture = this.texture(resources.marker);
     const idle = resources.clips.get(clipKey(this.direction, 0));
     if (!idle?.frames[0]) throw new Error("角色缺少預設靜止影格。");
@@ -345,6 +354,7 @@ export class WanderGame {
   }
 
   private moveTo(goal: Cell) {
+    if (this.transitioning) return;
     const { width, height } = this.resources.map.header;
     const start = this.segment?.to ?? this.player;
     const route = findPathToward(start, goal, width, height, (x, y) =>
@@ -373,6 +383,7 @@ export class WanderGame {
   }
 
   private faceToward(target: Cell) {
+    if (this.transitioning) return;
     const origin = this.segment?.to ?? this.player;
     const direction = directionToward(origin, target);
     if (direction === null) {
@@ -395,6 +406,7 @@ export class WanderGame {
   }
 
   private tick(deltaMS: number) {
+    if (this.transitioning) return;
     const elapsed = Math.min(deltaMS, 50);
     if (!this.segment && this.route.length) {
       const to = this.route.shift()!;
@@ -409,8 +421,21 @@ export class WanderGame {
     if (this.segment) {
       this.segment.elapsed += elapsed;
       if (this.segment.elapsed >= this.segment.duration) {
+        const previous = this.player;
         this.player = this.segment.to;
         this.segment = undefined;
+        const warp = warpOnStep(this.warps, previous, this.player);
+        if (warp) {
+          this.route = [];
+          this.pendingDirection = undefined;
+          this.target = undefined;
+          this.transitioning = true;
+          this.message = `傳送至地圖 ${warp.to.mapId} (${warp.to.x}, ${warp.to.y})…`;
+          this.updateCharacter(0);
+          this.emitStatus();
+          this.onWarp(warp, this.direction);
+          return;
+        }
         if (!this.route.length) {
           if (this.pendingDirection !== undefined) {
             this.direction = this.pendingDirection;
@@ -466,6 +491,7 @@ export class WanderGame {
   private emitStatus() {
     this.onStatus({
       player: { ...this.player },
+      direction: this.direction,
       hover: this.hover && { ...this.hover },
       target: this.target && { ...this.target },
       message: this.message,
@@ -474,6 +500,15 @@ export class WanderGame {
 
   publishStatus() {
     this.emitStatus();
+  }
+
+  setTransitioning(value: boolean, message?: string) {
+    this.transitioning = value;
+    this.dragging = undefined;
+    if (message) {
+      this.message = message;
+      this.emitStatus();
+    }
   }
 
   destroy() {

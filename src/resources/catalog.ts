@@ -1,3 +1,5 @@
+import { START_MAP_ID } from "../game/spawn";
+
 export const REQUIRED_PATHS = [
   "Assets/bin/GraphicInfoV3_19.bin",
   "Assets/bin/GraphicV3_19.bin",
@@ -50,9 +52,12 @@ function sortedMaps(maps: MapFile[]) {
 }
 
 export function defaultMap(maps: readonly MapFile[]) {
-  return (
-    maps.find(({ path }) => path.toLowerCase() === "assets/map/0/1011.dat") ??
-    maps[0]
+  return staticMap(maps, START_MAP_ID) ?? maps[0];
+}
+
+export function staticMap(maps: readonly MapFile[], id: number) {
+  return maps.find(
+    ({ path }) => path.toLowerCase() === `assets/map/0/${id}.dat`,
   );
 }
 
