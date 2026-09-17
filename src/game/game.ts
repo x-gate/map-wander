@@ -18,6 +18,7 @@ import { cursorCssValue } from "./cursor";
 import {
   cameraPosition,
   clampZoom,
+  defaultZoom,
   screenTile,
   tilePosition,
 } from "./geometry";
@@ -32,6 +33,8 @@ import {
 import { resolveSpawn, type SpawnPoint } from "./spawn";
 import { warpOnStep, type MapWarps } from "./warp";
 import type { WarpDefinition } from "../resources/warp";
+import { MapVisibility, viewportBounds, type Placement } from "./visibility";
+import { VisibleGraphics } from "./visible-graphics";
 
 const STEP_DURATION = 190;
 
@@ -48,6 +51,9 @@ export interface GameStatus {
   hover?: Cell;
   target?: Cell;
   message: string;
+  zoom: number;
+  visibleTiles: number;
+  totalTiles: number;
 }
 
 function textureFrom(graphic: DecodedGraphic) {
@@ -89,6 +95,12 @@ export class WanderGame {
   private observer?: ResizeObserver;
   private initialized = false;
   private transitioning = false;
+  private visibility: MapVisibility;
+  private visible = new Map<number, Placement>();
+  private tileSprites = new Map<number, Sprite>();
+  private tileGraphics: VisibleGraphics<Texture>;
+  private drawOrder = new WeakMap<Container, number>();
+  private lastViewport = "";
   private message = "左鍵移動，右鍵改變朝向";
   onStatus: (status: GameStatus) => void = () => {};
   onWarp: (warp: WarpDefinition, direction: number) => void = () => {};
@@ -98,7 +110,24 @@ export class WanderGame {
     private resources: LoadedGame,
     spawn?: SpawnPoint,
     private warps: MapWarps = new Map(),
+    private initialZoom?: number,
   ) {
+    this.visibility = new MapVisibility(resources);
+    this.tileGraphics = new VisibleGraphics(
+      async (record) => textureFrom(await resources.decodeGraphic(record)),
+      (texture) => texture.destroy(true),
+      () => {
+        this.syncTileSprites();
+        const error = this.tileGraphics.errors.values().next();
+        if (!error.done)
+          this.message = `視野圖像載入失敗：${String(error.value)}`;
+        this.emitStatus();
+      },
+    );
+    this.ground.sortableChildren = true;
+    this.depthLayer.sortFunction = (a, b) =>
+      a.zIndex - b.zIndex ||
+      (this.drawOrder.get(a) ?? 0) - (this.drawOrder.get(b) ?? 0);
     this.walkability = buildWalkability(resources.map, resources.mapRecords);
     const { width, height } = resources.map.header;
     const start = resolveSpawn(
@@ -140,6 +169,7 @@ export class WanderGame {
       autoDensity: true,
       resolution: Math.min(devicePixelRatio, 2),
       preference: "webgl",
+      autoStart: false,
       resizeTo: this.host,
     });
     this.initialized = true;
@@ -153,80 +183,91 @@ export class WanderGame {
     this.app.stage.addChild(this.world);
     this.world.addChild(this.ground, this.scene, this.depthLayer, this.marker);
     this.scene.addChild(this.npcLayer);
-    this.renderMap();
-    this.renderNpcs();
     this.scene.addChild(this.character);
     this.depthLayer.attach(this.character);
-    this.fit();
-    this.bindInput();
+    const { width, height } = this.resources.map.header;
+    this.world.scale.set(
+      this.initialZoom ??
+        defaultZoom(
+          width,
+          height,
+          this.host.clientWidth,
+          this.host.clientHeight,
+        ),
+    );
     this.updateCharacter(0);
+    await this.tileGraphics.ready();
+    this.app.render();
+    this.bindInput();
     this.app.ticker.add((ticker) => this.tick(ticker.deltaMS));
-    this.observer = new ResizeObserver(() => this.fit());
+    this.observer = new ResizeObserver(() => {
+      if (this.cameraFollowing && this.characterFoot)
+        this.centerCameraOn(this.characterFoot);
+      else this.refreshViewport();
+    });
     this.observer.observe(this.host);
     this.emitStatus();
   }
 
-  private renderMap() {
-    const { map, mapGraphics, mapRecords } = this.resources;
-    const { width, height } = map.header;
-    for (let y = 0; y < height; y++)
-      for (let x = 0; x < width; x++) {
-        const index = y * width + x;
-        const point = tilePosition(x, y, width);
-        for (const layer of ["ground", "object"] as const) {
-          const id = map[layer][index];
-          const graphic = mapGraphics.get(id);
-          if (!graphic) continue;
-          const sprite = new Sprite(this.texture(graphic));
-          sprite.position.set(point.x + graphic.offX, point.y + graphic.offY);
-          const record = mapRecords.get(id);
-          if (layer === "ground" || record?.asGround)
-            this.ground.addChild(sprite);
-          else {
-            sprite.zIndex = point.y;
-            this.scene.addChild(sprite);
-            this.depthLayer.attach(sprite);
-          }
-        }
-      }
+  get zoom() {
+    return this.world.scale.x;
   }
 
-  private renderNpcs() {
-    const width = this.resources.map.header.width;
-    for (const npc of this.resources.npcs) {
-      const position = npc.positions[0];
-      const point = tilePosition(position.x, position.y, width);
-      const sprite = new Sprite(this.texture(npc.graphic));
-      sprite.label = `npc:${npc.sourceLine}:direction:${npc.direction}`;
-      sprite.position.set(
-        point.x + npc.graphic.offX,
-        point.y + npc.graphic.offY,
-      );
-      sprite.zIndex = point.y + 0.25;
-      this.npcLayer.addChild(sprite);
-      this.depthLayer.attach(sprite);
-    }
+  start() {
+    this.app.start();
   }
 
-  private fit() {
-    const { width, height } = this.resources.map.header;
-    const mapWidth = (width + height) * 32;
-    const mapHeight = (width + height) * 24 + 160;
-    const zoom = clampZoom(
-      Math.min(
-        (this.host.clientWidth - 80) / mapWidth,
-        (this.host.clientHeight - 80) / mapHeight,
-        1.5,
-      ),
+  private refreshViewport() {
+    const bounds = viewportBounds(
+      this.world.x,
+      this.world.y,
+      this.zoom,
+      this.host.clientWidth,
+      this.host.clientHeight,
     );
-    this.world.scale.set(zoom);
-    if (this.cameraFollowing && this.characterFoot)
-      this.centerCameraOn(this.characterFoot);
-    else
-      this.world.position.set(
-        this.host.clientWidth / 2 - (height - width) * 16 * zoom,
-        this.host.clientHeight / 2 - (width + height) * 12 * zoom + 70,
-      );
+    const key = `${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}`;
+    if (this.lastViewport === key) return;
+    this.lastViewport = key;
+    this.visible = new Map(
+      this.visibility
+        .query(bounds)
+        .map((placement) => [placement.key, placement]),
+    );
+    // Remove sprites before releasing their shared textures.
+    for (const [id, sprite] of this.tileSprites) {
+      if (this.visible.has(id)) continue;
+      this.depthLayer.detach(sprite);
+      sprite.destroy();
+      this.tileSprites.delete(id);
+    }
+    this.tileGraphics.set(
+      [...this.visible.values()].map(({ record }) => record),
+    );
+    this.syncTileSprites();
+    this.emitStatus();
+  }
+
+  private syncTileSprites() {
+    for (const placement of this.visible.values()) {
+      if (this.tileSprites.has(placement.key)) continue;
+      const texture = this.tileGraphics.loaded.get(placement.record.row);
+      if (!texture) continue;
+      const sprite = new Sprite(texture);
+      sprite.position.set(placement.left, placement.top);
+      this.drawOrder.set(sprite, placement.key);
+      if (placement.label) sprite.label = placement.label;
+      if (placement.layer === "ground") {
+        sprite.zIndex = placement.key;
+        this.ground.addChild(sprite);
+      } else {
+        sprite.zIndex = placement.depth;
+        (placement.layer === "npc" ? this.npcLayer : this.scene).addChild(
+          sprite,
+        );
+        this.depthLayer.attach(sprite);
+      }
+      this.tileSprites.set(placement.key, sprite);
+    }
   }
 
   private centerCameraOn(point: { x: number; y: number }) {
@@ -237,6 +278,7 @@ export class WanderGame {
       this.world.scale.x,
     );
     this.world.position.set(position.x, position.y);
+    this.refreshViewport();
   }
 
   private tileFromPointer(clientX: number, clientY: number) {
@@ -264,6 +306,7 @@ export class WanderGame {
       this.emitStatus();
     });
     canvas.addEventListener("pointermove", (event) => {
+      if (this.transitioning) return;
       const drag = this.dragging;
       if (drag && drag.id === event.pointerId) {
         const dx = event.clientX - drag.x;
@@ -276,11 +319,12 @@ export class WanderGame {
         this.world.y += dy;
         drag.x = event.clientX;
         drag.y = event.clientY;
+        this.refreshViewport();
       }
       this.movePointer(event);
     });
     canvas.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || this.transitioning) return;
       this.dragging = {
         id: event.pointerId,
         x: event.clientX,
@@ -311,6 +355,7 @@ export class WanderGame {
       "wheel",
       (event) => {
         event.preventDefault();
+        if (this.transitioning) return;
         const rect = canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
@@ -327,6 +372,7 @@ export class WanderGame {
           y - (y - this.world.y) * ratio,
         );
         this.world.scale.set(next);
+        this.refreshViewport();
       },
       { passive: false },
     );
@@ -495,6 +541,9 @@ export class WanderGame {
       hover: this.hover && { ...this.hover },
       target: this.target && { ...this.target },
       message: this.message,
+      zoom: this.zoom,
+      visibleTiles: this.tileSprites.size,
+      totalTiles: this.visibility.total,
     });
   }
 
@@ -513,8 +562,15 @@ export class WanderGame {
 
   destroy() {
     this.observer?.disconnect();
+    this.tileGraphics.destroy();
     for (const texture of this.textures) texture.destroy(true);
-    if (this.initialized) this.app.destroy(true, { children: true });
+    // Map transitions briefly own two applications. `true` also releases
+    // Pixi's global pools, invalidating batches used by the other renderer.
+    if (this.initialized)
+      this.app.destroy(
+        { removeView: true, releaseGlobalResources: false },
+        { children: true },
+      );
     else this.world.destroy({ children: true });
   }
 }

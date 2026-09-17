@@ -56,6 +56,8 @@ app.innerHTML = `
         <div><span>角色</span><strong id="player-coordinate">—</strong></div>
         <div><span>朝向</span><strong id="player-direction">—</strong></div>
         <div><span>游標格位</span><strong id="hover-coordinate">—</strong></div>
+        <div><span>縮放</span><strong id="camera-zoom">—</strong></div>
+        <div><span>視野圖塊</span><strong id="visible-tiles">—</strong></div>
         <p id="movement-status">左鍵移動，右鍵改變朝向</p>
       </aside>
       <div class="controls-hint"><span>左鍵</span> 移動 <span>右鍵</span> 轉向 <span>左鍵拖曳</span> 平移 <span>滾輪</span> 縮放</div>
@@ -80,6 +82,8 @@ const playerCoordinate =
 const hoverCoordinate =
   document.querySelector<HTMLElement>("#hover-coordinate")!;
 const movementStatus = document.querySelector<HTMLElement>("#movement-status")!;
+const cameraZoom = document.querySelector<HTMLElement>("#camera-zoom")!;
+const visibleTiles = document.querySelector<HTMLElement>("#visible-tiles")!;
 const resourceNote = document.querySelector<HTMLElement>("#resource-note")!;
 const mapToolbar = document.querySelector<HTMLFormElement>("#map-toolbar")!;
 const mapSearch = document.querySelector<HTMLInputElement>("#map-search")!;
@@ -175,7 +179,7 @@ async function start(
       selectedMap.npcMapId === null
         ? undefined
         : warpIndex.maps.get(selectedMap.npcMapId);
-    nextGame = new WanderGame(nextHost, resources, spawn, mapWarps);
+    nextGame = new WanderGame(nextHost, resources, spawn, mapWarps, game?.zoom);
     await nextGame.initialize();
     // Publish only a fully initialized scene. Failed loads leave the old scene usable.
     game?.destroy();
@@ -183,6 +187,7 @@ async function start(
     game = nextGame;
     gameHost = nextHost;
     nextHost.style.visibility = "visible";
+    game.start();
     nextGame = undefined;
     nextHost = undefined;
     game.onStatus = (status) => {
@@ -192,6 +197,9 @@ async function start(
         ? `(${status.hover.x}, ${status.hover.y})`
         : "—";
       movementStatus.textContent = status.message;
+      cameraZoom.textContent = `${Math.round(status.zoom * 100)}%`;
+      cameraZoom.dataset.value = String(status.zoom);
+      visibleTiles.textContent = `${status.visibleTiles} / ${status.totalTiles}`;
     };
     game.onWarp = (warp, direction) => void travel(warp, direction);
     game.publishStatus();

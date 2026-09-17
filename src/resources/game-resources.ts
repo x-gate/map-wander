@@ -18,7 +18,7 @@ export interface AnimationClip {
 export interface LoadedGame {
   mapPath: string;
   map: Contract.Map;
-  mapGraphics: Map<number, DecodedGraphic>;
+  decodeGraphic: (record: GraphicRecord) => Promise<DecodedGraphic>;
   mapRecords: Map<number, GraphicRecord>;
   cursor: DecodedGraphic;
   marker: DecodedGraphic;
@@ -32,7 +32,7 @@ export interface LoadedGame {
 }
 
 export interface LoadedNpc extends NpcDefinition {
-  graphic: DecodedGraphic;
+  graphic: GraphicRecord;
 }
 
 export const clipKey = (direction: number, action: 0 | 1) =>
@@ -128,16 +128,14 @@ export async function loadGame(
     });
   }
 
-  onProgress(`解析 ${selectedMap.path} 並解碼地圖…`);
+  onProgress(`解析 ${selectedMap.path} 並建立地圖索引…`);
   const map = parser.map_build_from_bytes(
     new Uint8Array(await (await selectedMap.getFile()).arrayBuffer()),
   );
   const ids = new Set([...map.ground, ...map.object]);
   ids.delete(0);
-  const mapGraphics = new Map<number, DecodedGraphic>();
   const mapRecords = new Map<number, GraphicRecord>();
   const missingMapIds: number[] = [];
-  let decodedTiles = 0;
   for (const mapId of ids) {
     const record = base.mapGraphic(mapId);
     if (!record) {
@@ -145,14 +143,9 @@ export async function loadGame(
       continue;
     }
     mapRecords.set(mapId, record);
-    mapGraphics.set(mapId, await base.decode(record));
-    decodedTiles++;
-    if (decodedTiles % 10 === 0)
-      onProgress(`解碼地圖圖塊… ${decodedTiles}/${ids.size}`);
   }
 
-  onProgress("解碼 NPC 圖像…");
-  const npcGraphics = new Map<number, DecodedGraphic>();
+  onProgress("建立 NPC 索引…");
   const missingNpcGraphicMapIds = new Set<number>();
   const npcs: LoadedNpc[] = [];
   const npcIssues = [...npcData.issues];
@@ -169,18 +162,10 @@ export async function loadGame(
       );
       continue;
     }
-    let graphic = npcGraphics.get(definition.graphicMapId);
+    const graphic = base.mapGraphic(definition.graphicMapId);
     if (!graphic) {
-      graphic = mapGraphics.get(definition.graphicMapId);
-      if (!graphic) {
-        const record = base.mapGraphic(definition.graphicMapId);
-        if (!record) {
-          missingNpcGraphicMapIds.add(definition.graphicMapId);
-          continue;
-        }
-        graphic = await base.decode(record);
-      }
-      npcGraphics.set(definition.graphicMapId, graphic);
+      missingNpcGraphicMapIds.add(definition.graphicMapId);
+      continue;
     }
     npcs.push({
       ...definition,
@@ -194,7 +179,7 @@ export async function loadGame(
   return {
     mapPath: selectedMap.path,
     map,
-    mapGraphics,
+    decodeGraphic: (record) => base.decode(record),
     mapRecords,
     cursor,
     marker,

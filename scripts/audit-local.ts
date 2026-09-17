@@ -18,6 +18,12 @@ import { parseWarpTsv } from "../src/resources/warp";
 import { buildWarpIndex } from "../src/game/warp";
 import { buildWalkability } from "../src/game/movement";
 import { START_MAP_ID, START_POSITION, resolveSpawn } from "../src/game/spawn";
+import {
+  cameraPosition,
+  defaultZoom,
+  tilePosition,
+} from "../src/game/geometry";
+import { MapVisibility, viewportBounds } from "../src/game/visibility";
 
 const selectedRoot = process.argv[2];
 if (!selectedRoot)
@@ -74,15 +80,32 @@ const mapWarps =
     ? undefined
     : warpIndex.maps.get(selectedMap.npcMapId);
 const walkability = buildWalkability(game.map, game.mapRecords);
-const spawn =
-  selectedMap.npcMapId === START_MAP_ID
-    ? resolveSpawn(
-        game.map.header.width,
-        game.map.header.height,
-        (x, y) => walkability[y * game.map.header.width + x] === 1,
-        START_POSITION,
-      )
-    : undefined;
+const spawn = resolveSpawn(
+  game.map.header.width,
+  game.map.header.height,
+  (x, y) => walkability[y * game.map.header.width + x] === 1,
+  selectedMap.npcMapId === START_MAP_ID ? START_POSITION : undefined,
+);
+const zoom = defaultZoom(
+  game.map.header.width,
+  game.map.header.height,
+  1280,
+  674,
+);
+const camera = cameraPosition(
+  tilePosition(spawn.x, spawn.y, game.map.header.width),
+  1280,
+  674,
+  zoom,
+);
+const visibility = new MapVisibility(game);
+const visible = visibility.query(
+  viewportBounds(camera.x, camera.y, zoom, 1280, 674),
+);
+const visibleRecords = new Map(
+  visible.map(({ record }) => [record.row, record]),
+);
+for (const record of visibleRecords.values()) await game.decodeGraphic(record);
 const after = await hashes();
 const npcAfter = await hashFile(npcPath);
 const warpAfter = await hashFile(warpPath);
@@ -106,7 +129,15 @@ console.log(
         path: game.mapPath,
         width: game.map.header.width,
         height: game.map.header.height,
-        decodedGraphicIds: [...game.mapGraphics.keys()].sort((a, b) => a - b),
+        indexedGraphicIds: [...game.mapRecords.keys()].sort((a, b) => a - b),
+        viewport: {
+          width: 1280,
+          height: 674,
+          zoom,
+          visibleTiles: visible.length,
+          totalTiles: visibility.total,
+          decodedRows: [...visibleRecords.keys()],
+        },
         missingGraphicIds: game.missingMapIds,
       },
       cursor: {

@@ -21,6 +21,22 @@ export function clampZoom(value: number) {
   return Math.min(3, Math.max(0.35, value));
 }
 
+export function defaultZoom(
+  width: number,
+  height: number,
+  viewportWidth: number,
+  viewportHeight: number,
+) {
+  const previous = clampZoom(
+    Math.min(
+      (viewportWidth - 80) / ((width + height) * 32),
+      (viewportHeight - 80) / ((width + height) * 24 + 160),
+      1.5,
+    ),
+  );
+  return clampZoom(previous * 2);
+}
+
 export function cameraPosition(
   target: { x: number; y: number },
   viewportWidth: number,
