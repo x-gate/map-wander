@@ -11,6 +11,31 @@ export interface NpcDefinition {
   graphicMapId: number;
 }
 
+export interface NpcMapData {
+  definitions: NpcDefinition[];
+  issues: string[];
+}
+
+export type NpcCatalog = Record<number, NpcMapData>;
+
+export function parseNpcCatalog(text: string): NpcCatalog {
+  const catalog: NpcCatalog = {};
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
+    const mapIdText = line.split("\t")[8]?.trim();
+    if (!mapIdText || !/^\d+$/.test(mapIdText)) continue;
+    const mapId = Number(mapIdText);
+    const data = (catalog[mapId] ??= { definitions: [], issues: [] });
+    try {
+      const [definition] = parseNpcTsv(line, mapId);
+      if (!definition) throw new Error("欄位不足");
+      data.definitions.push({ ...definition, sourceLine: index + 1 });
+    } catch {
+      data.issues.push(`npc.txt 第 ${index + 1} 行的數值欄位無效，已略過。`);
+    }
+  }
+  return catalog;
+}
+
 function strictInteger(value: string | undefined, field: string, line: number) {
   const text = value?.trim() ?? "";
   if (!/^-?\d+$/.test(text))

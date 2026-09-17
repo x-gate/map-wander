@@ -1,8 +1,8 @@
 import type * as Contract from "../../.generated/xglib/contract";
 import { animeHeader, GraphicArchive, loadAnime } from "./binary";
 import type { DecodedGraphic, GraphicRecord } from "./binary";
-import type { GameFiles } from "./catalog";
-import type { NpcDefinition } from "./npc";
+import type { GameFiles, MapFile } from "./catalog";
+import type { NpcDefinition, NpcMapData } from "./npc";
 
 export interface AnimationClip {
   direction: number;
@@ -16,6 +16,7 @@ export interface AnimationClip {
 }
 
 export interface LoadedGame {
+  mapPath: string;
   map: Contract.Map;
   mapGraphics: Map<number, DecodedGraphic>;
   mapRecords: Map<number, GraphicRecord>;
@@ -27,6 +28,7 @@ export interface LoadedGame {
   missingMapIds: number[];
   npcs: LoadedNpc[];
   missingNpcGraphicMapIds: number[];
+  npcIssues: string[];
 }
 
 export interface LoadedNpc extends NpcDefinition {
@@ -39,8 +41,9 @@ export const clipKey = (direction: number, action: 0 | 1) =>
 export async function loadGame(
   parser: typeof Contract,
   files: GameFiles,
+  selectedMap: MapFile,
   onProgress: (message: string) => void = () => {},
-  npcDefinitions: readonly NpcDefinition[] = [],
+  npcData: NpcMapData = { definitions: [], issues: [] },
 ): Promise<LoadedGame> {
   onProgress("讀取調色盤與索引…");
   const palette = new Uint8Array(
@@ -125,9 +128,9 @@ export async function loadGame(
     });
   }
 
-  onProgress("解析 1011.dat 並解碼地圖…");
+  onProgress(`解析 ${selectedMap.path} 並解碼地圖…`);
   const map = parser.map_build_from_bytes(
-    new Uint8Array(await files["Assets/map/0/1011.dat"].arrayBuffer()),
+    new Uint8Array(await (await selectedMap.getFile()).arrayBuffer()),
   );
   const ids = new Set([...map.ground, ...map.object]);
   ids.delete(0);
@@ -152,17 +155,20 @@ export async function loadGame(
   const npcGraphics = new Map<number, DecodedGraphic>();
   const missingNpcGraphicMapIds = new Set<number>();
   const npcs: LoadedNpc[] = [];
+  const npcIssues = [...npcData.issues];
   const { width, height } = map.header;
-  for (const definition of npcDefinitions) {
-    if (definition.mapId !== 1011) continue;
+  for (const definition of npcData.definitions) {
+    if (definition.mapId !== selectedMap.npcMapId) continue;
     if (
       definition.positions.some(
         ({ x, y }) => x < 0 || y < 0 || x >= width || y >= height,
       )
-    )
-      throw new Error(
-        `npc.txt 第 ${definition.sourceLine} 行的座標超出 1011 地圖範圍。`,
+    ) {
+      npcIssues.push(
+        `npc.txt 第 ${definition.sourceLine} 行的座標超出地圖範圍，已略過。`,
       );
+      continue;
+    }
     let graphic = npcGraphics.get(definition.graphicMapId);
     if (!graphic) {
       graphic = mapGraphics.get(definition.graphicMapId);
@@ -186,6 +192,7 @@ export async function loadGame(
     });
   }
   return {
+    mapPath: selectedMap.path,
     map,
     mapGraphics,
     mapRecords,
@@ -196,6 +203,7 @@ export async function loadGame(
     animeDuplicateCount: animeResult.duplicateCount,
     missingMapIds: missingMapIds.sort((a, b) => a - b),
     npcs,
+    npcIssues,
     missingNpcGraphicMapIds: [...missingNpcGraphicMapIds].sort((a, b) => a - b),
   };
 }

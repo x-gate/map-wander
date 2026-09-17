@@ -84,6 +84,7 @@ export class WanderGame {
   private characterFoot?: { x: number; y: number };
   private dragging?: { id: number; x: number; y: number; moved: boolean };
   private observer?: ResizeObserver;
+  private initialized = false;
   private message = "左鍵移動，右鍵改變朝向";
   onStatus: (status: GameStatus) => void = () => {};
 
@@ -92,12 +93,6 @@ export class WanderGame {
     private resources: LoadedGame,
   ) {
     this.walkability = buildWalkability(resources.map, resources.mapRecords);
-    const markerTexture = this.texture(resources.marker);
-    const idle = resources.clips.get(clipKey(this.direction, 0));
-    if (!idle?.frames[0]) throw new Error("角色缺少預設靜止影格。");
-    this.marker = new Sprite(markerTexture);
-    this.marker.visible = false;
-    this.character = new Sprite(this.texture(idle.frames[0].graphic));
     const { width, height } = resources.map.header;
     this.player = nearestWalkable(
       { x: Math.floor(width / 2), y: Math.floor(height / 2) },
@@ -105,6 +100,12 @@ export class WanderGame {
       height,
       (x, y) => this.isWalkable(x, y),
     );
+    const markerTexture = this.texture(resources.marker);
+    const idle = resources.clips.get(clipKey(this.direction, 0));
+    if (!idle?.frames[0]) throw new Error("角色缺少預設靜止影格。");
+    this.marker = new Sprite(markerTexture);
+    this.marker.visible = false;
+    this.character = new Sprite(this.texture(idle.frames[0].graphic));
   }
 
   private texture(graphic: DecodedGraphic) {
@@ -132,10 +133,11 @@ export class WanderGame {
       preference: "webgl",
       resizeTo: this.host,
     });
+    this.initialized = true;
     this.host.replaceChildren(this.app.canvas);
     this.app.canvas.setAttribute(
       "aria-label",
-      "1011 地圖畫布；左鍵移動或拖曳平移，右鍵改變朝向，滾輪縮放",
+      `${this.resources.mapPath} 地圖畫布；左鍵移動或拖曳平移，右鍵改變朝向，滾輪縮放`,
     );
     this.app.canvas.tabIndex = 0;
     this.app.canvas.style.cursor = cursorCssValue(this.resources.cursor);
@@ -470,9 +472,14 @@ export class WanderGame {
     });
   }
 
+  publishStatus() {
+    this.emitStatus();
+  }
+
   destroy() {
     this.observer?.disconnect();
     for (const texture of this.textures) texture.destroy(true);
-    this.app.destroy(true, { children: true });
+    if (this.initialized) this.app.destroy(true, { children: true });
+    else this.world.destroy({ children: true });
   }
 }

@@ -1,8 +1,7 @@
 /// <reference types="vite/client" />
 
 declare module "virtual:map-npcs" {
-  import type { NpcDefinition } from "./resources/npc";
+  const definitions: import("./resources/npc").NpcCatalog;
 
-  const definitions: readonly NpcDefinition[];
   export default definitions;
 }

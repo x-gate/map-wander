@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import { parseNpcTsv } from "./src/resources/npc";
+import { parseNpcCatalog } from "./src/resources/npc";
 
 const NPC_MODULE_ID = "virtual:map-npcs";
 const RESOLVED_NPC_MODULE_ID = `\0${NPC_MODULE_ID}`;
@@ -21,7 +21,7 @@ export default defineConfig({
       load(id) {
         if (id !== RESOLVED_NPC_MODULE_ID) return undefined;
         this.addWatchFile(npcPath);
-        const definitions = parseNpcTsv(readFileSync(npcPath, "latin1"), 1011);
+        const definitions = parseNpcCatalog(readFileSync(npcPath, "latin1"));
         return `export default ${JSON.stringify(definitions)};`;
       },
     },
